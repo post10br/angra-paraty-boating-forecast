@@ -10,8 +10,8 @@ export const FORECAST_POINTS = [
   {
     id: 'abraao',
     name: 'Ilha Grande / Abraão',
-    lat: -23.1417,
-    lon: -44.1678,
+    lat: -23.1400,
+    lon: -44.1637,
     role: 'island',
   },
   {
