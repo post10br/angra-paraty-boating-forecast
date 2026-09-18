@@ -51,6 +51,15 @@ function writeCache(payload) {
   }
 }
 
+function snapshotHasWind(data) {
+  const crossing = data?.points?.crossing?.hourly;
+  if (!Array.isArray(crossing)) return false;
+  const now = Date.now() - 60 * 60 * 1000;
+  return crossing.some(
+    (h) => h?.windKn != null && new Date(h.time).getTime() >= now,
+  );
+}
+
 async function readStaticSnapshot() {
   if (typeof document === 'undefined' || typeof fetch !== 'function') return null;
   try {
@@ -61,6 +70,8 @@ async function readStaticSnapshot() {
     const data = await res.json();
     if (!data?.fetchedAt || !data?.points || !data?.list) return null;
     if (!isFresh(data.fetchedAt, STATIC_TTL_MS)) return null;
+    // Don't serve a swell-only snapshot when anchorage scoring needs wind.
+    if (!snapshotHasWind(data)) return null;
     return { ...data, source: 'static' };
   } catch {
     return null;
