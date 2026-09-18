@@ -94,9 +94,7 @@ export function updateMap(forecastData, showAllAnchorages = true) {
     layerGroup.addLayer(marker);
   }
 
-  // Polyline corridor
-  const latlngs = FORECAST_POINTS.filter((p) => p.id !== 'abraao').map((p) => [p.lat, p.lon]);
-  // Better corridor: Angra -> crossing -> Paraty, plus Abraão spur
+  // Corridor: Angra -> crossing -> Paraty
   const corridor = [
     [forecastData.points.angra.lat, forecastData.points.angra.lon],
     [forecastData.points.crossing.lat, forecastData.points.crossing.lon],

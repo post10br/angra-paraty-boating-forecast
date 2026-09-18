@@ -40,7 +40,7 @@ function normalizeMulti(raw, points) {
   return [raw];
 }
 
-export async function fetchAllForecasts(points = FORECAST_POINTS) {
+async function fetchWeatherBundle(points) {
   const coords = multiCoords(points);
   const wxUrl =
     `${WEATHER_URL}?${qs({
@@ -51,6 +51,29 @@ export async function fetchAllForecasts(points = FORECAST_POINTS) {
       timezone: TZ,
       forecast_days: 16,
     })}`;
+  try {
+    return normalizeMulti(await fetchJson(wxUrl), points);
+  } catch (err) {
+    // Fallback: one request per point (helps when a fat multi-call is rejected)
+    const list = [];
+    for (const pt of points) {
+      const url = `${WEATHER_URL}?${qs({
+        latitude: pt.lat,
+        longitude: pt.lon,
+        hourly: HOURLY_WX,
+        daily: DAILY_WX,
+        wind_speed_unit: 'kn',
+        timezone: TZ,
+        forecast_days: 16,
+      })}`;
+      list.push(await fetchJson(url));
+    }
+    return list;
+  }
+}
+
+async function fetchMarineBundle(points) {
+  const coords = multiCoords(points);
   const marineUrl =
     `${MARINE_URL}?${qs({
       ...coords,
@@ -58,14 +81,29 @@ export async function fetchAllForecasts(points = FORECAST_POINTS) {
       timezone: TZ,
       forecast_days: 16,
     })}`;
+  try {
+    return normalizeMulti(await fetchJson(marineUrl), points);
+  } catch (err) {
+    const list = [];
+    for (const pt of points) {
+      const url = `${MARINE_URL}?${qs({
+        latitude: pt.lat,
+        longitude: pt.lon,
+        hourly: HOURLY_MARINE,
+        timezone: TZ,
+        forecast_days: 16,
+      })}`;
+      list.push(await fetchJson(url));
+    }
+    return list;
+  }
+}
 
-  const [wxRaw, marineRaw] = await Promise.all([
-    fetchJson(wxUrl),
-    fetchJson(marineUrl),
+export async function fetchAllForecasts(points = FORECAST_POINTS) {
+  const [wxList, marineList] = await Promise.all([
+    fetchWeatherBundle(points),
+    fetchMarineBundle(points),
   ]);
-
-  const wxList = normalizeMulti(wxRaw, points);
-  const marineList = normalizeMulti(marineRaw, points);
 
   const byId = {};
   points.forEach((pt, i) => {
