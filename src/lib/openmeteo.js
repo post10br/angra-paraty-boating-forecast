@@ -15,13 +15,43 @@ function qs(params) {
   return new URLSearchParams(params).toString();
 }
 
+const CACHE_KEY = 'angra-paraty-forecast-v1';
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches page refresh cadence
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.fetchedAt || !parsed?.payload) return null;
+    if (Date.now() - new Date(parsed.fetchedAt).getTime() > CACHE_TTL_MS) return null;
+    return parsed.payload;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(payload) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ fetchedAt: payload.fetchedAt, payload }),
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 async function fetchJson(url) {
   const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} for ${url}: ${text.slice(0, 200)}`);
+    throw new Error(`HTTP ${res.status} for ${url}: ${JSON.stringify(data).slice(0, 200)}`);
   }
-  return res.json();
+  if (data?.error) {
+    throw new Error(data.reason || 'Open-Meteo error');
+  }
+  return data;
 }
 
 /** Batch lat/lon for Open-Meteo multi-point */
@@ -99,7 +129,12 @@ async function fetchMarineBundle(points) {
   }
 }
 
-export async function fetchAllForecasts(points = FORECAST_POINTS) {
+export async function fetchAllForecasts(points = FORECAST_POINTS, { force = false } = {}) {
+  if (!force) {
+    const cached = readCache();
+    if (cached?.points && cached?.list) return cached;
+  }
+
   const [wxList, marineList] = await Promise.all([
     fetchWeatherBundle(points),
     fetchMarineBundle(points),
@@ -110,11 +145,13 @@ export async function fetchAllForecasts(points = FORECAST_POINTS) {
     byId[pt.id] = mergePoint(pt, wxList[i], marineList[i]);
   });
 
-  return {
+  const payload = {
     fetchedAt: new Date().toISOString(),
     points: byId,
     list: points.map((p) => byId[p.id]),
   };
+  writeCache(payload);
+  return payload;
 }
 
 function mergePoint(meta, wx, marine) {
