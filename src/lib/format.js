@@ -1,0 +1,115 @@
+const TZ = 'America/Sao_Paulo';
+
+export function knToKmh(kn) {
+  return kn * 1.852;
+}
+
+export function degToCompass(deg) {
+  if (deg == null || Number.isNaN(deg)) return '—';
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const i = Math.round(((deg % 360) + 360) % 360 / 22.5) % 16;
+  return dirs[i];
+}
+
+export function formatWind(kn, gust = null) {
+  if (kn == null) return '—';
+  const base = `${Math.round(kn)} kn (${Math.round(knToKmh(kn))} km/h)`;
+  if (gust != null && gust > kn) {
+    return `${base}, gusts ${Math.round(gust)} kn`;
+  }
+  return base;
+}
+
+export function formatDir(deg) {
+  if (deg == null) return '—';
+  return `${degToCompass(deg)} ${Math.round(deg)}°`;
+}
+
+export function formatWave(h, period, dir) {
+  const parts = [];
+  if (h != null) parts.push(`${Number(h).toFixed(1)} m`);
+  if (period != null) parts.push(`${Math.round(period)} s`);
+  if (dir != null) parts.push(formatDir(dir));
+  return parts.length ? parts.join(' · ') : '—';
+}
+
+export function formatTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString('en-GB', {
+    timeZone: TZ,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }) + ' BRT';
+}
+
+export function formatClock(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('en-GB', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+export function formatDay(iso) {
+  const d = new Date(iso.includes('T') ? iso : iso + 'T12:00:00');
+  return d.toLocaleDateString('en-GB', {
+    timeZone: TZ,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+export function weatherLabel(code) {
+  const map = {
+    0: 'Clear',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Fog',
+    48: 'Rime fog',
+    51: 'Light drizzle',
+    53: 'Drizzle',
+    55: 'Heavy drizzle',
+    61: 'Light rain',
+    63: 'Rain',
+    65: 'Heavy rain',
+    66: 'Freezing rain',
+    67: 'Heavy freezing rain',
+    71: 'Light snow',
+    73: 'Snow',
+    75: 'Heavy snow',
+    77: 'Snow grains',
+    80: 'Light showers',
+    81: 'Showers',
+    82: 'Heavy showers',
+    85: 'Snow showers',
+    86: 'Heavy snow showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm + hail',
+    99: 'Severe thunderstorm',
+  };
+  return map[code] ?? `Code ${code}`;
+}
+
+export function nowIsoBRT() {
+  return new Date().toLocaleString('en-GB', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' BRT';
+}
+
+export { TZ };
