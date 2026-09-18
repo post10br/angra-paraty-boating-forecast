@@ -137,15 +137,22 @@ export function updateMap(forecastData, showAllAnchorages = true) {
 }
 
 function averageConditions(hours) {
-  if (!hours.length) return { windKn: 0, gustKn: 0, windDir: 0, swellM: 0, periodS: 8 };
-  const n = hours.length;
-  const windDir = circularMean(hours.map((h) => h.windDir).filter((v) => v != null));
+  if (!hours.length) {
+    return { windKn: null, gustKn: null, windDir: null, swellM: 0, periodS: 8 };
+  }
+  const windSamples = hours.map((h) => h.windKn).filter((v) => v != null);
+  const gustSamples = hours.map((h) => h.gustKn).filter((v) => v != null);
+  const dirSamples = hours.map((h) => h.windDir).filter((v) => v != null);
+  const swellSamples = hours.map((h) => h.swellM ?? h.waveM).filter((v) => v != null);
+  const periodSamples = hours.map((h) => h.swellPeriod ?? h.wavePeriod).filter((v) => v != null);
   return {
-    windKn: hours.reduce((a, h) => a + (h.windKn || 0), 0) / n,
-    gustKn: hours.reduce((a, h) => a + (h.gustKn || 0), 0) / n,
-    windDir,
-    swellM: hours.reduce((a, h) => a + ((h.swellM ?? h.waveM) || 0), 0) / n,
-    periodS: hours.reduce((a, h) => a + ((h.swellPeriod ?? h.wavePeriod) || 8), 0) / n,
+    windKn: windSamples.length ? windSamples.reduce((a, b) => a + b, 0) / windSamples.length : null,
+    gustKn: gustSamples.length ? gustSamples.reduce((a, b) => a + b, 0) / gustSamples.length : null,
+    windDir: dirSamples.length ? circularMean(dirSamples) : null,
+    swellM: swellSamples.length ? swellSamples.reduce((a, b) => a + b, 0) / swellSamples.length : 0,
+    periodS: periodSamples.length
+      ? periodSamples.reduce((a, b) => a + b, 0) / periodSamples.length
+      : 8,
   };
 }
 

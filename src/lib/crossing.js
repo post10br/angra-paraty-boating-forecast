@@ -97,26 +97,64 @@ export function isSheltered(windDeg, sectors) {
  * Returns { status: 'favorable'|'marginal'|'exposed', score: 0-100, reason }
  */
 export function scoreAnchorage(anchorage, conditions) {
-  const { windKn = 0, gustKn = 0, windDir, swellM = 0, periodS = 8 } = conditions;
-  const v = Math.max(windKn, gustKn * 0.85);
-  const sheltered = isSheltered(windDir, anchorage.shelterFrom);
+  const windKn = conditions.windKn;
+  const gustKn = conditions.gustKn;
+  const windDir = conditions.windDir;
+  const swellM = conditions.swellM ?? 0;
+  const periodS = conditions.periodS ?? 8;
   const q = anchorage.quality ?? 3;
 
-  let score = 50;
-  if (sheltered) score += 15 + q * 5;
-  else score -= 10 + Math.min(v, 25);
+  const hasSpeed = windKn != null || gustKn != null;
+  const hasDir = windDir != null && !Number.isNaN(windDir);
+  const v = hasSpeed ? Math.max(windKn ?? 0, (gustKn ?? 0) * 0.85) : null;
 
-  if (v < 10) score += 15;
-  else if (v < 15) score += 5;
-  else if (v < 20) score -= 10;
+  // Missing wind (common when weather API is rate-limited): never invent 0° / Exposed
+  if (v == null && !hasDir) {
+    const h = swellM * (periodS < 6 ? 1.3 : 1);
+    let score = 55 + q * 4;
+    if (h > 1.2) score -= 15;
+    if (h > 1.8) score -= 15;
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    const status = score >= 65 ? 'favorable' : score >= 45 ? 'marginal' : 'exposed';
+    return {
+      status,
+      score,
+      reason: h > 0.3 ? `Wind data unavailable · swell ~${h.toFixed(1)} m` : 'Wind data unavailable',
+      sheltered: null,
+    };
+  }
+
+  // Truly calm: treat as favorable regardless of sector
+  if (v != null && v < 3) {
+    return {
+      status: 'favorable',
+      score: 88,
+      reason: `Calm (${v.toFixed(0)} kn)`,
+      sheltered: true,
+    };
+  }
+
+  const speed = v ?? 0;
+  const sheltered = hasDir ? isSheltered(windDir, anchorage.shelterFrom) : null;
+
+  let score = 50;
+  if (sheltered === true) score += 15 + q * 5;
+  else if (sheltered === false) score -= 10 + Math.min(speed, 25);
+  else score += q * 3; // direction unknown
+
+  if (speed < 10) score += 15;
+  else if (speed < 15) score += 5;
+  else if (speed < 20) score -= 10;
   else score -= 25;
 
   const h = swellM * (periodS < 6 ? 1.3 : 1);
-  if (sheltered) {
+  if (sheltered === true) {
     if (h > 1.5) score -= 10;
-  } else {
+  } else if (sheltered === false) {
     if (h > 0.8) score -= 15;
     if (h > 1.5) score -= 20;
+  } else if (h > 1.2) {
+    score -= 10;
   }
 
   score = Math.max(0, Math.min(100, Math.round(score)));
@@ -126,9 +164,10 @@ export function scoreAnchorage(anchorage, conditions) {
   else if (score >= 45) status = 'marginal';
   else status = 'exposed';
 
-  const reason = sheltered
-    ? `Sheltered from ${Math.round(windDir)}° wind; ${v.toFixed(0)} kn`
-    : `Open to ${Math.round(windDir)}° wind; ${v.toFixed(0)} kn`;
+  let reason;
+  if (sheltered === true) reason = `Sheltered from ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
+  else if (sheltered === false) reason = `Open to ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
+  else reason = `Wind dir unknown; ${speed.toFixed(0)} kn`;
 
   return { status, score, reason, sheltered };
 }
