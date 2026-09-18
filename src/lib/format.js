@@ -12,9 +12,12 @@ export function degToCompass(deg) {
 }
 
 export function formatWind(kn, gust = null) {
-  if (kn == null) return '—';
+  if (kn == null && gust == null) return '—';
+  if (kn == null) {
+    return `gusts ${Math.round(gust)} kn (${Math.round(knToKmh(gust))} km/h)`;
+  }
   const base = `${Math.round(kn)} kn (${Math.round(knToKmh(kn))} km/h)`;
-  if (gust != null && gust > kn) {
+  if (gust != null && !Number.isNaN(gust)) {
     return `${base}, gusts ${Math.round(gust)} kn`;
   }
   return base;

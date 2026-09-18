@@ -136,6 +136,7 @@ function averageConditions(hours) {
     return {
       windKn: null,
       gustKn: null,
+      gustMaxKn: null,
       windDir: null,
       swellM: null,
       periodS: null,
@@ -148,9 +149,13 @@ function averageConditions(hours) {
   const swellSamples = hours.map((h) => h.swellM ?? h.waveM).filter((v) => v != null);
   const periodSamples = hours.map((h) => h.swellPeriod ?? h.wavePeriod).filter((v) => v != null);
   const swellDirSamples = hours.map((h) => h.swellDir ?? h.waveDir).filter((v) => v != null);
+  const gustMax = gustSamples.length ? Math.max(...gustSamples) : null;
+  const windAvg = windSamples.length ? windSamples.reduce((a, b) => a + b, 0) / windSamples.length : null;
   return {
-    windKn: windSamples.length ? windSamples.reduce((a, b) => a + b, 0) / windSamples.length : null,
-    gustKn: gustSamples.length ? gustSamples.reduce((a, b) => a + b, 0) / gustSamples.length : null,
+    windKn: windAvg,
+    // Prefer peak gust over the window for boaters; fall back to avg gust
+    gustKn: gustMax ?? (gustSamples.length ? gustSamples.reduce((a, b) => a + b, 0) / gustSamples.length : null),
+    gustMaxKn: gustMax,
     windDir: dirSamples.length ? circularMean(dirSamples) : null,
     swellM: swellSamples.length ? swellSamples.reduce((a, b) => a + b, 0) / swellSamples.length : null,
     periodS: periodSamples.length
@@ -177,10 +182,15 @@ function windyLink(lat, lon) {
 
 function anchoragePopupHtml(a, s) {
   const c = s.cond || {};
+  const gustVal = c.gustMaxKn ?? c.gustKn;
   const windLine =
-    c.windKn != null || c.windDir != null
-      ? `<div class="popup-row"><span class="popup-k">Wind</span> ${formatWind(c.windKn, c.gustKn)} ${formatDir(c.windDir)}</div>`
+    c.windKn != null || c.windDir != null || gustVal != null
+      ? `<div class="popup-row"><span class="popup-k">Wind</span> ${formatWind(c.windKn, gustVal)} ${formatDir(c.windDir)}</div>`
       : `<div class="popup-row"><span class="popup-k">Wind</span> —</div>`;
+  const gustLine =
+    gustVal != null
+      ? `<div class="popup-row"><span class="popup-k">Gusts</span> ${Math.round(gustVal)} kn (${Math.round(gustVal * 1.852)} km/h)</div>`
+      : `<div class="popup-row"><span class="popup-k">Gusts</span> —</div>`;
   const swellLine = `<div class="popup-row"><span class="popup-k">Swell</span> ${formatWave(c.swellM, c.periodS, c.swellDir)}</div>`;
   return `<div class="anch-popup">
     <div class="anch-popup-top">
@@ -189,6 +199,7 @@ function anchoragePopupHtml(a, s) {
     </div>
     <div class="popup-status" style="color:${statusColor(s.status)}">${s.status} · ${s.score}/100</div>
     ${windLine}
+    ${gustLine}
     ${swellLine}
     <div class="popup-reason">${s.reason}</div>
     <em class="popup-note">${escape(a.note)}</em>
