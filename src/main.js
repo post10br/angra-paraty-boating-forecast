@@ -81,39 +81,57 @@ async function load() {
     detail: err.message,
   }));
 
+  // Resolve alerts separately so a forecast/API failure never suppresses the Marinha banner.
+  const [forecastResult, alerts] = await Promise.all([
+    fetchAllForecasts().catch((error) => ({ error })),
+    alertsPromise,
+  ]);
+  renderAlertsBanner(els.alerts, alerts);
+
   try {
-    const [forecast, alerts] = await Promise.all([fetchAllForecasts(), alertsPromise]);
-
-    renderAlertsBanner(els.alerts, alerts);
-
+    if (forecastResult?.error) throw forecastResult.error;
+    const forecast = forecastResult;
     const crossingPt = forecast.points.crossing;
-    const hours48 = sliceNextHours(crossingPt.hourly, 48);
+    const hours48 = sliceNextHours(crossingPt.hourly || [], 48);
     const crossing = summarizeCrossing(hours48);
 
-    renderSummary(els.summary, {
-      crossing,
-      crossingPoint: crossingPt,
-      hours48,
-      fetchedAt: forecast.fetchedAt,
-    });
+    if (hours48.length) {
+      renderSummary(els.summary, {
+        crossing,
+        crossingPoint: crossingPt,
+        hours48,
+        fetchedAt: forecast.fetchedAt,
+      });
+    } else {
+      els.summary.innerHTML = `
+        <section class="card error-card">
+          <h2>Forecast data is temporarily unavailable</h2>
+          <p>Marinha alerts are still shown above. Weather and marine data will appear when Open-Meteo responds.</p>
+        </section>`;
+    }
 
     const scored = updateMap(forecast, true);
     renderAnchorageList(els.anchorage, scored);
-
     renderHourly(els.hourly, hours48);
-    renderWeekly(els.weekly, crossingPt.daily);
-    renderOutlook(els.outlook, crossingPt.daily);
+    renderWeekly(els.weekly, crossingPt.daily || []);
+    renderOutlook(els.outlook, crossingPt.daily || []);
 
+    if (forecast.errors?.length) {
+      els.summary.insertAdjacentHTML(
+        'afterbegin',
+        '<p class="card callout warn">Partial forecast: one Open-Meteo feed is unavailable; showing the data that loaded.</p>',
+      );
+    }
     els.updated.textContent = `Last updated ${nowIsoBRT()}`;
   } catch (err) {
     console.error(err);
     els.summary.innerHTML = `
       <section class="card error-card">
         <h2>Could not load forecast</h2>
-        <p>${String(err.message || err)}</p>
+        <p>Marinha alerts are still available above. ${String(err.message || err)}</p>
         <p class="muted">Open-Meteo may be rate-limiting this network. Try Refresh in a minute.</p>
       </section>`;
-    els.updated.textContent = `Update failed · ${nowIsoBRT()}`;
+    els.updated.textContent = `Forecast unavailable · ${nowIsoBRT()}`;
   } finally {
     els.refresh.disabled = false;
   }

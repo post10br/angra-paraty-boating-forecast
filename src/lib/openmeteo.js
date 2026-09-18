@@ -17,6 +17,14 @@ function qs(params) {
 
 const CACHE_KEY = 'angra-paraty-forecast-v1';
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches page refresh cadence
+const STATIC_TTL_MS = 90 * 60 * 1000;
+
+function isFresh(timestamp, ttl) {
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) return false;
+  const age = Date.now() - time;
+  return age >= 0 && age < ttl;
+}
 
 function readCache() {
   try {
@@ -24,8 +32,9 @@ function readCache() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.fetchedAt || !parsed?.payload) return null;
-    if (Date.now() - new Date(parsed.fetchedAt).getTime() > CACHE_TTL_MS) return null;
-    return parsed.payload;
+    if (!isFresh(parsed.fetchedAt, CACHE_TTL_MS)) return null;
+    if (parsed.payload?.points && parsed.payload?.list) return parsed.payload;
+    return null;
   } catch {
     return null;
   }
@@ -42,14 +51,30 @@ function writeCache(payload) {
   }
 }
 
+async function readStaticSnapshot() {
+  if (typeof document === 'undefined' || typeof fetch !== 'function') return null;
+  try {
+    // document.baseURI keeps this relative to either the Vite root or Pages project path.
+    const url = new URL('data/latest.json', document.baseURI).toString();
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.fetchedAt || !data?.points || !data?.list) return null;
+    if (!isFresh(data.fetchedAt, STATIC_TTL_MS)) return null;
+    return { ...data, source: 'static' };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchJson(url) {
   const res = await fetch(url);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} for ${url}: ${JSON.stringify(data).slice(0, 200)}`);
-  }
-  if (data?.error) {
-    throw new Error(data.reason || 'Open-Meteo error');
+  // Open-Meteo can return a JSON error body even when the transport status is usable.
+  if (!res.ok || data?.error === true) {
+    throw new Error(
+      data?.reason || `HTTP ${res.status} for ${url}: ${JSON.stringify(data).slice(0, 200)}`,
+    );
   }
   return data;
 }
@@ -63,16 +88,67 @@ function multiCoords(points) {
 }
 
 function normalizeMulti(raw, points) {
-  // Single point returns object; multi returns array
-  if (Array.isArray(raw)) return raw;
-  if (points.length === 1) return [raw];
-  // Sometimes still object when one point fails — wrap
-  return [raw];
+  // Single point returns object; multi returns array.
+  const values = Array.isArray(raw) ? raw : [raw];
+  return points.map((_, i) => {
+    const value = values[i];
+    return value?.error === true ? null : value || null;
+  });
+}
+
+function pointWeatherUrl(pt) {
+  return `${WEATHER_URL}?${qs({
+    latitude: pt.lat,
+    longitude: pt.lon,
+    hourly: HOURLY_WX,
+    daily: DAILY_WX,
+    wind_speed_unit: 'kn',
+    timezone: TZ,
+    forecast_days: 16,
+  })}`;
+}
+
+function pointMarineUrl(pt) {
+  return `${MARINE_URL}?${qs({
+    latitude: pt.lat,
+    longitude: pt.lon,
+    hourly: HOURLY_MARINE,
+    timezone: TZ,
+    forecast_days: 16,
+  })}`;
+}
+
+/** Fetch one bundle without allowing a weather failure to cancel marine (or vice versa). */
+async function fetchBundle(points, batchUrl, pointUrl) {
+  let batchError = null;
+  try {
+    return { list: normalizeMulti(await fetchJson(batchUrl), points), error: null };
+  } catch (err) {
+    batchError = err;
+  }
+
+  // A batch request can be rejected independently of the other API. Retry points in
+  // parallel, but keep failed points as null so a partial payload can still render.
+  const settled = await Promise.all(
+    points.map(async (pt) => {
+      try {
+        return await fetchJson(pointUrl(pt));
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const hasData = settled.some(Boolean);
+  return {
+    list: settled,
+    error: hasData ? null : batchError?.message || 'Open-Meteo request failed',
+  };
 }
 
 async function fetchWeatherBundle(points) {
   const coords = multiCoords(points);
-  const wxUrl =
+  return fetchBundle(
+    points,
     `${WEATHER_URL}?${qs({
       ...coords,
       hourly: HOURLY_WX,
@@ -80,77 +156,64 @@ async function fetchWeatherBundle(points) {
       wind_speed_unit: 'kn',
       timezone: TZ,
       forecast_days: 16,
-    })}`;
-  try {
-    return normalizeMulti(await fetchJson(wxUrl), points);
-  } catch (err) {
-    // Fallback: one request per point (helps when a fat multi-call is rejected)
-    const list = [];
-    for (const pt of points) {
-      const url = `${WEATHER_URL}?${qs({
-        latitude: pt.lat,
-        longitude: pt.lon,
-        hourly: HOURLY_WX,
-        daily: DAILY_WX,
-        wind_speed_unit: 'kn',
-        timezone: TZ,
-        forecast_days: 16,
-      })}`;
-      list.push(await fetchJson(url));
-    }
-    return list;
-  }
+    })}`,
+    pointWeatherUrl,
+  );
 }
 
 async function fetchMarineBundle(points) {
   const coords = multiCoords(points);
-  const marineUrl =
+  return fetchBundle(
+    points,
     `${MARINE_URL}?${qs({
       ...coords,
       hourly: HOURLY_MARINE,
       timezone: TZ,
       forecast_days: 16,
-    })}`;
-  try {
-    return normalizeMulti(await fetchJson(marineUrl), points);
-  } catch (err) {
-    const list = [];
-    for (const pt of points) {
-      const url = `${MARINE_URL}?${qs({
-        latitude: pt.lat,
-        longitude: pt.lon,
-        hourly: HOURLY_MARINE,
-        timezone: TZ,
-        forecast_days: 16,
-      })}`;
-      list.push(await fetchJson(url));
-    }
-    return list;
-  }
+    })}`,
+    pointMarineUrl,
+  );
 }
 
-export async function fetchAllForecasts(points = FORECAST_POINTS, { force = false } = {}) {
-  if (!force) {
-    const cached = readCache();
-    if (cached?.points && cached?.list) return cached;
-  }
+function hasForecastData(payload) {
+  return payload?.list?.some((point) => point?.hourly?.length || point?.daily?.length);
+}
 
-  const [wxList, marineList] = await Promise.all([
+/** Fetch live APIs and return whatever weather/marine data succeeded. */
+export async function fetchLiveForecasts(points = FORECAST_POINTS) {
+  const [wxResult, marineResult] = await Promise.all([
     fetchWeatherBundle(points),
     fetchMarineBundle(points),
   ]);
 
   const byId = {};
   points.forEach((pt, i) => {
-    byId[pt.id] = mergePoint(pt, wxList[i], marineList[i]);
+    byId[pt.id] = mergePoint(pt, wxResult.list[i], marineResult.list[i]);
   });
 
-  const payload = {
+  return {
     fetchedAt: new Date().toISOString(),
     points: byId,
     list: points.map((p) => byId[p.id]),
+    errors: [
+      wxResult.error ? `Weather: ${wxResult.error}` : null,
+      marineResult.error ? `Marine: ${marineResult.error}` : null,
+    ].filter(Boolean),
+    source: 'live',
   };
-  writeCache(payload);
+}
+
+export async function fetchAllForecasts(points = FORECAST_POINTS, { force = false } = {}) {
+  if (!force) {
+    const staticSnapshot = await readStaticSnapshot();
+    if (staticSnapshot) return staticSnapshot;
+
+    const cached = readCache();
+    if (cached?.points && cached?.list) return { ...cached, source: 'local-cache' };
+  }
+
+  const payload = await fetchLiveForecasts(points);
+  if (hasForecastData(payload)) writeCache(payload);
   return payload;
 }
 
@@ -194,8 +257,11 @@ function mergeHourly(wxH = {}, mH = {}) {
 }
 
 function buildDaily(wxDaily = {}, hourly = []) {
-  const days = wxDaily.time || [];
-  return days.map((date, i) => {
+  const weatherDays = wxDaily.time || [];
+  const hourlyDays = hourly.map((h) => h.time.slice(0, 10));
+  const days = [...new Set([...weatherDays, ...hourlyDays])].sort();
+  return days.map((date) => {
+    const i = weatherDays.indexOf(date);
     const dayHours = hourly.filter((h) => h.time.startsWith(date));
     const swellHeights = dayHours.map((h) => h.swellM ?? h.waveM).filter((v) => v != null);
     const periods = dayHours.map((h) => h.swellPeriod ?? h.wavePeriod).filter((v) => v != null);
@@ -217,9 +283,7 @@ function buildDaily(wxDaily = {}, hourly = []) {
       swellPeriodAvg: periods.length
         ? periods.reduce((a, b) => a + b, 0) / periods.length
         : null,
-      swellDir: swellDirs.length
-        ? swellDirs[Math.floor(swellDirs.length / 2)]
-        : null,
+      swellDir: swellDirs.length ? swellDirs[Math.floor(swellDirs.length / 2)] : null,
       hours: dayHours,
     };
   });
