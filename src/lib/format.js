@@ -20,9 +20,23 @@ export function formatWind(kn, gust = null) {
   return base;
 }
 
+/**
+ * Meteorological wind direction is WHERE THE WIND COMES FROM.
+ * The arrow shows where it is blowing TO (like Windy): easterly (from E) → arrow points west (←).
+ * CSS: 0° = arrow tip up (north); rotate by (fromDeg + 180).
+ */
+export function windBlowToRotation(fromDeg) {
+  if (fromDeg == null || Number.isNaN(fromDeg)) return null;
+  return (((fromDeg % 360) + 360) % 360 + 180) % 360;
+}
+
 export function formatDir(deg) {
-  if (deg == null) return '—';
-  return `${degToCompass(deg)} ${Math.round(deg)}°`;
+  if (deg == null || Number.isNaN(deg)) return '—';
+  const from = ((deg % 360) + 360) % 360;
+  const rot = windBlowToRotation(from);
+  const label = `${degToCompass(from)} ${Math.round(from)}°`;
+  // aria: announce "from" direction; arrow is visual blow-to
+  return `<span class="wind-dir" title="Wind from ${label} (arrow shows blow-to)"><span class="wind-dir-arrow" style="--wind-rot:${rot}deg" aria-hidden="true">⬆</span><span class="wind-dir-text">${label}</span></span>`;
 }
 
 export function formatWave(h, period, dir) {

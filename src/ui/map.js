@@ -1,7 +1,7 @@
 import L from 'leaflet';
 import { MAP_CENTER, MAP_ZOOM, ANCHORAGES, FORECAST_POINTS } from '../data/locations.js';
 import { scoreAnchorage } from '../lib/crossing.js';
-import { formatWind, formatWave, degToCompass } from '../lib/format.js';
+import { formatWind, formatWave, formatDir } from '../lib/format.js';
 
 let map;
 let layerGroup;
@@ -94,7 +94,7 @@ export function updateMap(forecastData, showAllAnchorages = true) {
       icon: arrowIcon(h.windDir, windColor(h.windKn), label),
     }).bindPopup(
       `<strong>${pt.name}</strong><br/>
-       Wind ${formatWind(h.windKn, h.gustKn)} ${degToCompass(h.windDir)}<br/>
+       Wind ${formatWind(h.windKn, h.gustKn)} ${formatDir(h.windDir)}<br/>
        Waves ${formatWave(h.swellM ?? h.waveM, h.swellPeriod ?? h.wavePeriod, h.swellDir ?? h.waveDir)}`
     );
     layerGroup.addLayer(marker);
