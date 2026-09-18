@@ -124,12 +124,7 @@ export function updateMap(forecastData, showAllAnchorages = true) {
     const a = s.anchorage;
     const marker = L.marker([a.lat, a.lon], {
       icon: pinIcon(s.status, a.name),
-    }).bindPopup(
-      `<strong>${a.name}</strong><br/>
-       <span style="color:${statusColor(s.status)}">${s.status}</span> (${s.score}/100)<br/>
-       ${s.reason}<br/>
-       <em>${a.note}</em>`
-    );
+    }).bindPopup(anchoragePopupHtml(a, s), { maxWidth: 280, className: 'anch-popup-wrap' });
     layerGroup.addLayer(marker);
   }
 
@@ -138,22 +133,66 @@ export function updateMap(forecastData, showAllAnchorages = true) {
 
 function averageConditions(hours) {
   if (!hours.length) {
-    return { windKn: null, gustKn: null, windDir: null, swellM: 0, periodS: 8 };
+    return {
+      windKn: null,
+      gustKn: null,
+      windDir: null,
+      swellM: null,
+      periodS: null,
+      swellDir: null,
+    };
   }
   const windSamples = hours.map((h) => h.windKn).filter((v) => v != null);
   const gustSamples = hours.map((h) => h.gustKn).filter((v) => v != null);
   const dirSamples = hours.map((h) => h.windDir).filter((v) => v != null);
   const swellSamples = hours.map((h) => h.swellM ?? h.waveM).filter((v) => v != null);
   const periodSamples = hours.map((h) => h.swellPeriod ?? h.wavePeriod).filter((v) => v != null);
+  const swellDirSamples = hours.map((h) => h.swellDir ?? h.waveDir).filter((v) => v != null);
   return {
     windKn: windSamples.length ? windSamples.reduce((a, b) => a + b, 0) / windSamples.length : null,
     gustKn: gustSamples.length ? gustSamples.reduce((a, b) => a + b, 0) / gustSamples.length : null,
     windDir: dirSamples.length ? circularMean(dirSamples) : null,
-    swellM: swellSamples.length ? swellSamples.reduce((a, b) => a + b, 0) / swellSamples.length : 0,
+    swellM: swellSamples.length ? swellSamples.reduce((a, b) => a + b, 0) / swellSamples.length : null,
     periodS: periodSamples.length
       ? periodSamples.reduce((a, b) => a + b, 0) / periodSamples.length
-      : 8,
+      : null,
+    swellDir: swellDirSamples.length ? circularMean(swellDirSamples) : null,
   };
+}
+
+function windyUrl(lat, lon) {
+  const la = Number(lat).toFixed(3);
+  const lo = Number(lon).toFixed(3);
+  // Wind + waves layers, zoomed to the anchorage
+  return `https://www.windy.com/${la}/${lo}?wind,waves,${la},${lo},12`;
+}
+
+function windyLink(lat, lon) {
+  const href = windyUrl(lat, lon);
+  return `<a class="windy-link" href="${href}" target="_blank" rel="noopener noreferrer" title="Open this spot in Windy">
+    <img class="windy-icon" src="https://www.windy.com/favicon.ico" width="18" height="18" alt="" />
+    <span>Windy</span>
+  </a>`;
+}
+
+function anchoragePopupHtml(a, s) {
+  const c = s.cond || {};
+  const windLine =
+    c.windKn != null || c.windDir != null
+      ? `<div class="popup-row"><span class="popup-k">Wind</span> ${formatWind(c.windKn, c.gustKn)} ${formatDir(c.windDir)}</div>`
+      : `<div class="popup-row"><span class="popup-k">Wind</span> —</div>`;
+  const swellLine = `<div class="popup-row"><span class="popup-k">Swell</span> ${formatWave(c.swellM, c.periodS, c.swellDir)}</div>`;
+  return `<div class="anch-popup">
+    <div class="anch-popup-top">
+      <strong>${escape(a.name)}</strong>
+      ${windyLink(a.lat, a.lon)}
+    </div>
+    <div class="popup-status" style="color:${statusColor(s.status)}">${s.status} · ${s.score}/100</div>
+    ${windLine}
+    ${swellLine}
+    <div class="popup-reason">${s.reason}</div>
+    <em class="popup-note">${escape(a.note)}</em>
+  </div>`;
 }
 
 function circularMean(degs) {
@@ -198,6 +237,7 @@ export function renderAnchorageList(root, scored) {
           <strong>${s.anchorage.name}</strong>
           <span class="status">${s.status}</span>
           <span class="muted">${s.reason}</span>
+          <span class="anch-swell">Swell ${formatWave(s.cond?.swellM, s.cond?.periodS, s.cond?.swellDir)}</span>
         </li>`
         )
         .join('')}

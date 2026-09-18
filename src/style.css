@@ -633,3 +633,67 @@ a {
 .wind-dir-text {
   font-variant-numeric: tabular-nums;
 }
+
+
+.anch-popup-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+.windy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #0b1f33;
+  color: #fff !important;
+  text-decoration: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.windy-link:hover {
+  background: #1e4d6b;
+}
+.windy-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+.popup-status {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  text-transform: capitalize;
+}
+.popup-row {
+  margin: 0.15rem 0;
+  font-size: 0.86rem;
+}
+.popup-k {
+  display: inline-block;
+  min-width: 2.8rem;
+  color: #4a6170;
+  font-weight: 600;
+}
+.popup-reason {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: #4a6170;
+}
+.popup-note {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: #4a6170;
+}
+.anch-swell {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+}
+.anch-swell .wind-dir {
+  font-size: inherit;
+}

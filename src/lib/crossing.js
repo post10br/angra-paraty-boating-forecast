@@ -96,41 +96,90 @@ export function isSheltered(windDeg, sectors) {
  * Score anchorage favorability for next 24–48h given expected wind/swell at nearest point.
  * Returns { status: 'favorable'|'marginal'|'exposed', score: 0-100, reason }
  */
+function effectiveSwell(swellM, periodS) {
+  const h = swellM ?? 0;
+  const p = periodS ?? 8;
+  // Short period = choppier / more uncomfortable at the same height
+  return p < 6 ? h * 1.35 : p < 8 ? h * 1.15 : h;
+}
+
+function applySwellToScore(score, anchorage, sheltered, swellM, periodS, swellDir) {
+  const h = effectiveSwell(swellM, periodS);
+  const swellSheltered =
+    swellDir != null && !Number.isNaN(swellDir)
+      ? isSheltered(swellDir, anchorage.shelterFrom)
+      : sheltered;
+
+  if (swellSheltered === true) {
+    if (h > 1.2) score -= 8;
+    if (h > 1.8) score -= 12;
+  } else if (swellSheltered === false) {
+    if (h > 0.6) score -= 10;
+    if (h > 1.0) score -= 15;
+    if (h > 1.5) score -= 20;
+  } else {
+    if (h > 0.8) score -= 8;
+    if (h > 1.4) score -= 12;
+  }
+  // Very short period always hurts a bit more at anchor
+  if ((periodS ?? 8) < 6 && h > 0.5) score -= 5;
+  return score;
+}
+
+function swellReasonBits(swellM, periodS, swellDir) {
+  if (swellM == null && periodS == null && swellDir == null) return '';
+  const parts = [];
+  if (swellM != null) parts.push(`${Number(swellM).toFixed(1)} m`);
+  if (periodS != null) parts.push(`${Math.round(periodS)} s`);
+  if (swellDir != null) parts.push(`from ${Math.round(swellDir)}°`);
+  return parts.length ? ` · swell ${parts.join(' / ')}` : '';
+}
+
 export function scoreAnchorage(anchorage, conditions) {
   const windKn = conditions.windKn;
   const gustKn = conditions.gustKn;
   const windDir = conditions.windDir;
-  const swellM = conditions.swellM ?? 0;
-  const periodS = conditions.periodS ?? 8;
+  const swellM = conditions.swellM;
+  const periodS = conditions.periodS;
+  const swellDir = conditions.swellDir;
   const q = anchorage.quality ?? 3;
 
   const hasSpeed = windKn != null || gustKn != null;
   const hasDir = windDir != null && !Number.isNaN(windDir);
   const v = hasSpeed ? Math.max(windKn ?? 0, (gustKn ?? 0) * 0.85) : null;
+  const swellBit = swellReasonBits(swellM, periodS, swellDir);
 
-  // Missing wind (common when weather API is rate-limited): never invent 0° / Exposed
+  // Missing wind: score from swell / period / direction only
   if (v == null && !hasDir) {
-    const h = swellM * (periodS < 6 ? 1.3 : 1);
     let score = 55 + q * 4;
-    if (h > 1.2) score -= 15;
-    if (h > 1.8) score -= 15;
+    score = applySwellToScore(score, anchorage, null, swellM ?? 0, periodS ?? 8, swellDir);
     score = Math.max(0, Math.min(100, Math.round(score)));
     const status = score >= 65 ? 'favorable' : score >= 45 ? 'marginal' : 'exposed';
     return {
       status,
       score,
-      reason: h > 0.3 ? `Wind data unavailable · swell ~${h.toFixed(1)} m` : 'Wind data unavailable',
+      reason: `Wind data unavailable${swellBit}`,
       sheltered: null,
+      swellM,
+      periodS,
+      swellDir,
     };
   }
 
-  // Truly calm: treat as favorable regardless of sector
+  // Calm wind: still apply swell (surge/chop can ruin a calm anchorage)
   if (v != null && v < 3) {
+    let score = 88;
+    score = applySwellToScore(score, anchorage, true, swellM ?? 0, periodS ?? 8, swellDir);
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    const status = score >= 65 ? 'favorable' : score >= 45 ? 'marginal' : 'exposed';
     return {
-      status: 'favorable',
-      score: 88,
-      reason: `Calm (${v.toFixed(0)} kn)`,
+      status,
+      score,
+      reason: `Calm (${v.toFixed(0)} kn)${swellBit}`,
       sheltered: true,
+      swellM,
+      periodS,
+      swellDir,
     };
   }
 
@@ -140,23 +189,14 @@ export function scoreAnchorage(anchorage, conditions) {
   let score = 50;
   if (sheltered === true) score += 15 + q * 5;
   else if (sheltered === false) score -= 10 + Math.min(speed, 25);
-  else score += q * 3; // direction unknown
+  else score += q * 3;
 
   if (speed < 10) score += 15;
   else if (speed < 15) score += 5;
   else if (speed < 20) score -= 10;
   else score -= 25;
 
-  const h = swellM * (periodS < 6 ? 1.3 : 1);
-  if (sheltered === true) {
-    if (h > 1.5) score -= 10;
-  } else if (sheltered === false) {
-    if (h > 0.8) score -= 15;
-    if (h > 1.5) score -= 20;
-  } else if (h > 1.2) {
-    score -= 10;
-  }
-
+  score = applySwellToScore(score, anchorage, sheltered, swellM ?? 0, periodS ?? 8, swellDir);
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   let status;
@@ -168,6 +208,7 @@ export function scoreAnchorage(anchorage, conditions) {
   if (sheltered === true) reason = `Sheltered from ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
   else if (sheltered === false) reason = `Open to ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
   else reason = `Wind dir unknown; ${speed.toFixed(0)} kn`;
+  reason += swellBit;
 
-  return { status, score, reason, sheltered };
+  return { status, score, reason, sheltered, swellM, periodS, swellDir };
 }
