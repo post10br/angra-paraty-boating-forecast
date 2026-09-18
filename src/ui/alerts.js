@@ -1,4 +1,5 @@
 import { formatTime } from '../lib/format.js';
+import { severityLabel, t } from '../lib/i18n.js';
 
 const SEV_CLASS = {
   extreme: 'sev-extreme',
@@ -13,19 +14,19 @@ export function renderAlertsBanner(root, data) {
     root.innerHTML = `
       <div class="alerts-banner active" role="status">
         <div class="alerts-banner__head">
-          <strong>Marinha do Brasil — Avisos de Mau Tempo</strong>
-          <span class="muted">Checked ${checked}</span>
+          <strong>${t('alerts.activeTitle')}</strong>
+          <span class="muted">${t('alerts.checked', { time: checked })}</span>
         </div>
         <ul class="alerts-list">
           ${data.alerts
             .map(
               (a) => `
             <li class="${SEV_CLASS[a.severity] || 'sev-info'}">
-              <span class="sev-pill">${a.severity}</span>
+              <span class="sev-pill">${severityLabel(a.severity)}</span>
               <div>
                 <div class="alert-title">${escapeHtml(a.title)}</div>
                 <p>${escapeHtml(a.summary)}</p>
-                <a href="${a.link}" target="_blank" rel="noopener">Official aviso ↗</a>
+                <a href="${a.link}" target="_blank" rel="noopener">${t('alerts.official')}</a>
               </div>
             </li>`
             )
@@ -38,13 +39,17 @@ export function renderAlertsBanner(root, data) {
   root.innerHTML = `
     <div class="alerts-banner quiet" role="status">
       <div class="alerts-banner__head">
-        <strong>Marinha do Brasil alerts</strong>
-        <span class="muted">Last check ${checked}</span>
+        <strong>${t('alerts.quietTitle')}</strong>
+        <span class="muted">${t('alerts.lastCheck', { time: checked })}</span>
       </div>
-      <p class="quiet-msg">No active Marinha alerts for this area
-        <a href="${data.sourceUrl}" target="_blank" rel="noopener">Verify on CHM ↗</a>
+      <p class="quiet-msg">${t('alerts.none')}
+        <a href="${data.sourceUrl}" target="_blank" rel="noopener">${t('alerts.verify')}</a>
       </p>
-      ${data.detail ? `<p class="muted tiny">Fetch note: ${escapeHtml(data.detail)} — banner degrades gracefully when CHM blocks automated access.</p>` : ''}
+      ${
+        data.detail
+          ? `<p class="muted tiny">${t('alerts.fetchNote', { detail: escapeHtml(data.detail) })}</p>`
+          : ''
+      }
     </div>`;
 }
 

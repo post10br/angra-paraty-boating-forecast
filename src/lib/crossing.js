@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 /**
  * Crossing comfort for Angra ↔ Paraty exposed open-water leg.
  * Uses mid-crossing wind + swell/wave height + period.
@@ -131,8 +133,8 @@ function swellReasonBits(swellM, periodS, swellDir) {
   const parts = [];
   if (swellM != null) parts.push(`${Number(swellM).toFixed(1)} m`);
   if (periodS != null) parts.push(`${Math.round(periodS)} s`);
-  if (swellDir != null) parts.push(`from ${Math.round(swellDir)}°`);
-  return parts.length ? ` · swell ${parts.join(' / ')}` : '';
+  if (swellDir != null) parts.push(t('anch.swellFrom', { dir: Math.round(swellDir) }));
+  return parts.length ? t('anch.swellBit', { parts: parts.join(' / ') }) : '';
 }
 
 export function scoreAnchorage(anchorage, conditions) {
@@ -158,7 +160,7 @@ export function scoreAnchorage(anchorage, conditions) {
     return {
       status,
       score,
-      reason: `Wind data unavailable${swellBit}`,
+      reason: t('anch.reason.noWind', { swell: swellBit }),
       sheltered: null,
       swellM,
       periodS,
@@ -175,7 +177,7 @@ export function scoreAnchorage(anchorage, conditions) {
     return {
       status,
       score,
-      reason: `Calm (${v.toFixed(0)} kn)${swellBit}`,
+      reason: t('anch.reason.calm', { speed: v.toFixed(0), swell: swellBit }),
       sheltered: true,
       swellM,
       periodS,
@@ -205,10 +207,24 @@ export function scoreAnchorage(anchorage, conditions) {
   else status = 'exposed';
 
   let reason;
-  if (sheltered === true) reason = `Sheltered from ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
-  else if (sheltered === false) reason = `Open to ${Math.round(windDir)}° wind; ${speed.toFixed(0)} kn`;
-  else reason = `Wind dir unknown; ${speed.toFixed(0)} kn`;
-  reason += swellBit;
+  if (sheltered === true) {
+    reason = t('anch.reason.sheltered', {
+      dir: Math.round(windDir),
+      speed: speed.toFixed(0),
+      swell: swellBit,
+    });
+  } else if (sheltered === false) {
+    reason = t('anch.reason.open', {
+      dir: Math.round(windDir),
+      speed: speed.toFixed(0),
+      swell: swellBit,
+    });
+  } else {
+    reason = t('anch.reason.dirUnknown', {
+      speed: speed.toFixed(0),
+      swell: swellBit,
+    });
+  }
 
   return { status, score, reason, sheltered, swellM, periodS, swellDir };
 }

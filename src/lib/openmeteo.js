@@ -15,7 +15,7 @@ function qs(params) {
   return new URLSearchParams(params).toString();
 }
 
-const CACHE_KEY = 'angra-paraty-forecast-v1';
+const CACHE_KEY = 'angra-paraty-forecast-v2';
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches page refresh cadence
 const STATIC_TTL_MS = 90 * 60 * 1000;
 
@@ -64,7 +64,7 @@ async function readStaticSnapshot() {
   if (typeof document === 'undefined' || typeof fetch !== 'function') return null;
   try {
     // document.baseURI keeps this relative to either the Vite root or Pages project path.
-    const url = new URL('data/latest.json', document.baseURI).toString();
+    const url = new URL('data/latest.json?v=2', document.baseURI).toString();
     const res = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) return null;
     const data = await res.json();

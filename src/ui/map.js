@@ -2,6 +2,13 @@ import L from 'leaflet';
 import { MAP_CENTER, MAP_ZOOM, ANCHORAGES, FORECAST_POINTS } from '../data/locations.js';
 import { scoreAnchorage } from '../lib/crossing.js';
 import { formatWind, formatWave, formatDir } from '../lib/format.js';
+import {
+  anchorageDisplayName,
+  anchorageNote,
+  anchorageStatus,
+  pointDisplayName,
+  t,
+} from '../lib/i18n.js';
 
 let map;
 let layerGroup;
@@ -93,9 +100,9 @@ export function updateMap(forecastData, showAllAnchorages = true) {
     const marker = L.marker([pt.lat, pt.lon], {
       icon: arrowIcon(h.windDir, windColor(h.windKn), label),
     }).bindPopup(
-      `<strong>${pt.name}</strong><br/>
-       Wind ${formatWind(h.windKn, h.gustKn)} ${formatDir(h.windDir)}<br/>
-       Waves ${formatWave(h.swellM ?? h.waveM, h.swellPeriod ?? h.wavePeriod, h.swellDir ?? h.waveDir)}`
+      `<strong>${pointDisplayName(pt)}</strong><br/>
+       ${t('map.popup.wind')} ${formatWind(h.windKn, h.gustKn)} ${formatDir(h.windDir)}<br/>
+       ${t('map.popup.waves')} ${formatWave(h.swellM ?? h.waveM, h.swellPeriod ?? h.wavePeriod, h.swellDir ?? h.waveDir)}`
     );
     layerGroup.addLayer(marker);
   }
@@ -123,7 +130,7 @@ export function updateMap(forecastData, showAllAnchorages = true) {
   for (const s of toShow) {
     const a = s.anchorage;
     const marker = L.marker([a.lat, a.lon], {
-      icon: pinIcon(s.status, a.name),
+      icon: pinIcon(s.status, anchorageDisplayName(a)),
     }).bindPopup(anchoragePopupHtml(a, s), { maxWidth: 280, className: 'anch-popup-wrap' });
     layerGroup.addLayer(marker);
   }
@@ -174,7 +181,7 @@ function windyUrl(lat, lon) {
 
 function windyLink(lat, lon) {
   const href = windyUrl(lat, lon);
-  return `<a class="windy-link" href="${href}" target="_blank" rel="noopener noreferrer" title="Open this spot in Windy">
+  return `<a class="windy-link" href="${href}" target="_blank" rel="noopener noreferrer" title="${t('map.windyTitle')}">
     <img class="windy-icon" src="https://www.windy.com/favicon.ico" width="18" height="18" alt="" />
     <span>Windy</span>
   </a>`;
@@ -185,24 +192,24 @@ function anchoragePopupHtml(a, s) {
   const gustVal = c.gustMaxKn ?? c.gustKn;
   const windLine =
     c.windKn != null || c.windDir != null || gustVal != null
-      ? `<div class="popup-row"><span class="popup-k">Wind</span> ${formatWind(c.windKn, gustVal)} ${formatDir(c.windDir)}</div>`
-      : `<div class="popup-row"><span class="popup-k">Wind</span> —</div>`;
+      ? `<div class="popup-row"><span class="popup-k">${t('map.popup.wind')}</span> ${formatWind(c.windKn, gustVal)} ${formatDir(c.windDir)}</div>`
+      : `<div class="popup-row"><span class="popup-k">${t('map.popup.wind')}</span> —</div>`;
   const gustLine =
     gustVal != null
-      ? `<div class="popup-row"><span class="popup-k">Gusts</span> ${Math.round(gustVal)} kn (${Math.round(gustVal * 1.852)} km/h)</div>`
-      : `<div class="popup-row"><span class="popup-k">Gusts</span> —</div>`;
-  const swellLine = `<div class="popup-row"><span class="popup-k">Swell</span> ${formatWave(c.swellM, c.periodS, c.swellDir)}</div>`;
+      ? `<div class="popup-row"><span class="popup-k">${t('map.popup.gusts')}</span> ${Math.round(gustVal)} kn (${Math.round(gustVal * 1.852)} km/h)</div>`
+      : `<div class="popup-row"><span class="popup-k">${t('map.popup.gusts')}</span> —</div>`;
+  const swellLine = `<div class="popup-row"><span class="popup-k">${t('map.popup.swell')}</span> ${formatWave(c.swellM, c.periodS, c.swellDir)}</div>`;
   return `<div class="anch-popup">
     <div class="anch-popup-top">
-      <strong>${escape(a.name)}</strong>
+      <strong>${escape(anchorageDisplayName(a))}</strong>
       ${windyLink(a.lat, a.lon)}
     </div>
-    <div class="popup-status" style="color:${statusColor(s.status)}">${s.status} · ${s.score}/100</div>
+    <div class="popup-status" style="color:${statusColor(s.status)}">${anchorageStatus(s.status)} · ${s.score}/100</div>
     ${windLine}
     ${gustLine}
     ${swellLine}
     <div class="popup-reason">${s.reason}</div>
-    <em class="popup-note">${escape(a.note)}</em>
+    <em class="popup-note">${escape(anchorageNote(a))}</em>
   </div>`;
 }
 
@@ -235,20 +242,22 @@ export function renderAnchorageList(root, scored) {
   const sorted = [...scored].sort((a, b) => b.score - a.score);
   root.innerHTML = `
     <div class="anch-legend">
-      <span><i class="dot ok"></i> Favorable</span>
-      <span><i class="dot warn"></i> Marginal</span>
-      <span><i class="dot bad"></i> Exposed</span>
-      <span class="muted">Scored for next ~36 h wind/swell vs shelter sector</span>
+      <span><i class="dot ok"></i> ${t('anch.legend.favorable')}</span>
+      <span><i class="dot warn"></i> ${t('anch.legend.marginal')}</span>
+      <span><i class="dot bad"></i> ${t('anch.legend.exposed')}</span>
+      <span class="muted">${t('anch.legend.hint')}</span>
     </div>
     <ul class="anch-list">
       ${sorted
         .map(
           (s) => `
         <li class="anch-item ${s.status}">
-          <strong>${s.anchorage.name}</strong>
-          <span class="status">${s.status}</span>
+          <strong>${anchorageDisplayName(s.anchorage)}</strong>
+          <span class="status">${anchorageStatus(s.status)}</span>
           <span class="muted">${s.reason}</span>
-          <span class="anch-swell">Swell ${formatWave(s.cond?.swellM, s.cond?.periodS, s.cond?.swellDir)}</span>
+          <span class="anch-swell">${t('anch.list.swell', {
+            swell: formatWave(s.cond?.swellM, s.cond?.periodS, s.cond?.swellDir),
+          })}</span>
         </li>`
         )
         .join('')}

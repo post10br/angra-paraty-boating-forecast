@@ -2,7 +2,7 @@
 
 Interactive marine weather for recreational coastal boating on the **Angra dos Reis ↔ Paraty** corridor (Costa Verde / Ilha Grande Bay, Rio de Janeiro, Brazil).
 
-English UI · Portuguese place names · Times in **America/Sao_Paulo (BRT)**.
+Default UI **Português (pt-BR)** with an **EN/PT** toggle (top left; choice saved in localStorage) · Times in **America/Sao_Paulo (BRT)**.
 
 ## Features
 
