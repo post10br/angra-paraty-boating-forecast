@@ -346,6 +346,8 @@ a {
   position: relative;
   width: 14px;
   height: 14px;
+  /* Keep the Leaflet icon box = pin tip only; label is visual overflow */
+  overflow: visible;
 }
 
 .anch-pin span {

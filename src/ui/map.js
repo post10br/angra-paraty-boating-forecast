@@ -16,10 +16,15 @@ export function initMap(container) {
     zoomControl: true,
   }).setView(MAP_CENTER, MAP_ZOOM);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(map);
+  // Esri World Topo — no API key (light use). Avoids CARTO apikey watermark.
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution:
+        'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+      maxZoom: 19,
+    },
+  ).addTo(map);
 
   layerGroup = L.layerGroup().addTo(map);
   setTimeout(() => map.invalidateSize(), 100);
@@ -46,18 +51,21 @@ function arrowIcon(dir, color, label) {
       <span class="barb-arrow">⬆</span>
       <span class="barb-label">${label}</span>
     </div>`,
-    iconSize: [56, 56],
-    iconAnchor: [28, 28],
+    iconSize: [40, 40],
+    iconAnchor: [20, 20], // center of barb on the lat/lon
+    popupAnchor: [0, -16],
   });
 }
 
 function pinIcon(status, name) {
   const c = statusColor(status);
+  // iconSize matches the teardrop only; label overflows so the tip stays on lat/lon
   return L.divIcon({
     className: 'anch-marker',
     html: `<div class="anch-pin" style="--c:${c}"><span></span><em>${escape(name)}</em></div>`,
-    iconSize: [120, 40],
-    iconAnchor: [12, 36],
+    iconSize: [14, 14],
+    iconAnchor: [7, 14], // tip of rotated teardrop
+    popupAnchor: [0, -14],
   });
 }
 
